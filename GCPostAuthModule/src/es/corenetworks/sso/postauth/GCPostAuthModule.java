@@ -1,3 +1,89 @@
+        /*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package es.corenetworks.sso.postauth;
+
+/**
+ *
+ * @author Core Networks
+ */
+import com.iplanet.sso.SSOException;
+import com.iplanet.sso.SSOToken;
+import com.sun.identity.authentication.spi.AMPostAuthProcessInterface;
+import com.sun.identity.authentication.spi.AuthenticationException;
+import java.util.Map;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import es.corenetworks.sso.logger.AuditLogger;
+import static es.corenetworks.sso.postauth.GCPostAuthModule_backup.getContextoFromURL;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.security.Principal;
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Properties;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.sql.DataSource;
+import oracle.jdbc.OracleTypes;
+
+
+public class GCPostAuthModule implements AMPostAuthProcessInterface {
+    /**
+     * Default value for ENV_SESID_SESSION_ATTRIBUTE.
+     */
+    private static final String MODE = "file"; //file or db
+    private static final String MAC_ADDR_PARAM_NAME = "macaddress";
+    private static final String LOGIN_PARAM_NAME = "IDToken1";
+    private static final String query_datos_usuario = "{? = call pkg_pc_core.fnc_get_datos_usu(?,?,?,?,?,?,?,?,?,?)}";
+    private static final String query_permisos_aplicacion = "{? = call pkg_pc_core.fnc_get_datos_usu_apli(?,?,?,?,?,?,?,?,?)}";
+    /**
+     * Default value for ENV_RETURN_URL_PARAMETER
+     */
+    //private static String resourceJNDIName = "java:comp/env/jdbc/sso";
+    //Desarrollo
+    //private static String resourceJNDIName = "jdbc/sso";
+    //Prepro
+    private static String resourceJNDIName = "jdbc/auditords";
+    
+    public GCPostAuthModule(){
+        AuditLogger.DEBUG = true;
+    }
+
+    public void onLoginSuccess(Map requestParamsMap, HttpServletRequest request, HttpServletResponse response, SSOToken ssoToken) throws AuthenticationException {
+        if(AuditLogger.DEBUG){
+            AuditLogger.getInstance().debugLogMessage(getClass(), "onLoginSuccess()", "Starting...");
+//            showRequestParameters(request);
+        }
+        
+ 
+        String clientMacAddr = null;
+        try{
+            clientMacAddr = getClientMacAddress(request, ssoToken);
+        }catch(SSOException e){
+            AuditLogger.getInstance().debugLogError(getClass(), "onLoginSuccess()", "Error getting client mac address: "+e+"->"+e.getMessage());
+        }
+        if (clientMacAddr == null) clientMacAddr = "UNKNOWN_MAC";
+        String userUid = "UNKNOWN_USER";
+        try{
+            Principal user = ssoToken.getPrincipal();
+            if (user != null) userUid = user.getName();
+        }catch(SSOException e){
+            AuditLogger.getInstance().debugLogError(getClass(), "onLoginSuccess()", "Cannot retrieve principal from sso token.");
+        }
+
         AuditLogger.getInstance().logAccess(getClass(), "onLoginSuccess()","Acceso de "+userUid+" desde MAC: "+clientMacAddr, ssoToken);
         
         try{
